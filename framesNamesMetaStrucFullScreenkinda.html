@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cardano Asset Explorer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: Arial, sans-serif;
+        }
+
+        body {
+            background-color: #000;
+            color: #fff;
+        }
+
+        header {
+            display: flex;
+            align-items: center;
+            padding: 20px;
+        }
+
+        #logo {
+            width: 50px;
+            margin-right: 15px;
+        }
+
+        .search-container {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 20px;
+        }
+
+        #searchInput {
+            width: 400px;
+            padding: 10px;
+            background-color: #333;
+            border: 1px solid #fff;
+            color: #fff;
+        }
+
+        button, #viewDropdown, #collectionDropdown {
+            padding: 10px 20px;
+            margin-left: 10px;
+            cursor: pointer;
+        }
+
+        #assetGrid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 20px;
+            padding: 20px;
+            justify-items: center;
+        }
+
+        .asset-card {
+            width: 100%;
+            padding: 10px;
+            background-color: #1a1a1a;
+            border-radius: 10px;
+            box-shadow: 0px 4px 10px rgba(255, 255, 255, 0.3);
+            text-align: center;
+            cursor: pointer;
+            transition: transform 0.3s ease;
+        }
+
+        .asset-card:hover {
+            transform: scale(1.1);
+        }
+
+        .asset-image {
+            width: 100%;
+            height: 100px;
+            object-fit: contain;
+            border-radius: 5px;
+            overflow: hidden;
+        }
+
+        .asset-preview.small,
+.asset-image.small {
+    width: 200px;
+    height: 200px;
+    object-fit: cover;
+}
+
+.asset-preview.medium,
+.asset-image.medium {
+    width: 40%;
+    height: 50%;
+    object-fit: contain;
+}
+
+    </style>
+</head>
+<body>
+
+<header>
+    <img src="https://cryptologos.cc/logos/cardano-ada-logo.png" alt="Cardano Logo" id="logo">
+    <h1>Cardano Asset Explorer</h1>
+</header>
+
+<main>
+    <div class="search-container">
+        <input type="text" id="searchInput" placeholder="Enter Policy ID or Wallet Address">
+        <button onclick="handleSearch()">Search</button>
+        <button onclick="pasteFromClipboard()">Paste</button>
+        <select id="collectionDropdown"></select>
+        <select id="viewDropdown">
+            <option value="10">10</option>
+            <option value="20" selected>20</option>
+            <option value="50">50</option>
+            <option value="all">All</option>
+        </select>
+    </div>
+    <div id="assetGrid"></div>
+</main>
+
+<div id="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background-color:rgba(0,0,0,0.9);">
+    <div style="position:relative; margin:auto; padding:20px; background-color:#1a1a1a; border-radius:10px; width:80%; height:80%; overflow-y:auto;">
+        <button onclick="closeModal()">Close</button>
+        <button onclick="openFullScreen()">View Fullscreen</button>
+        <button onclick="viewCode()">View Code</button>
+        <pre id="modalContent"></pre>
+    </div>
+</div>
+
+<script>
+    const BLOCKFROST_API_KEY = 'mainnetFacOFHKb6AQFIygQqyOz9PIhkjzTPHTR';
+    const BLOCKFROST_URL = 'https://cardano-mainnet.blockfrost.io/api/v0';
+
+    async function handleSearch() {
+        console.log('Search initiated');
+        const input = document.getElementById('searchInput').value.trim();
+        if (/^[a-f0-9]{56,64}$/i.test(input)) {
+          // Call the function properly
+          const assets = await fAssets(input);
+            console.log('Assets fetched:', assets);
+            renderAssets(assets);
+        } else {
+            console.error('Invalid input');
+        }
+    }
+
+    async function fAssets(input) {
+        console.log('Input Policy ID:', input);
+
+        try {
+            const response = await fetch(`${BLOCKFROST_URL}/assets/policy/${input}`, {
+                headers: { 'project_id': BLOCKFROST_API_KEY }
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed to fetch policy assets: ${response.status} ${response.statusText}`);
+            }
+
+            const assetsList = await response.json();
+            console.log('Assets List:', assetsList);
+
+            if (!Array.isArray(assetsList) || assetsList.length === 0) {
+                console.warn('Assets list is empty or not an array');
+                return [];
+            }
+
+            let assets = [];  // Initialize assets array
+            let page = 1;     // Initialize page if needed for pagination
+
+            for (const asset of assetsList) {
+                console.log(`Fetching asset: ${asset.asset}`);
+
+                const assetResponse = await fetch(`${BLOCKFROST_URL}/assets/${asset.asset}`, {
+                    headers: { 'project_id': BLOCKFROST_API_KEY }
+                });
+
+                if (!assetResponse.ok) {
+                    console.error(`Failed to fetch asset ${asset.asset}: ${assetResponse.status} ${assetResponse.statusText}`);
+                    continue;  // Skip to the next asset if this one fails
+                }
+
+                const data = await assetResponse.json();
+                const metadata = data.onchain_metadata || {};
+                const assetName = metadata.name || hexToString(asset.asset.slice(56));
+
+                if (!data) {
+                    console.warn(`No data for asset: ${asset.asset}`);
+                    continue;
+                }
+
+                assets.push(data);
+                page++;
+                console.log('hello');
+            }
+
+            console.log('hello2');
+            console.log('Fetched Assets:', assets);
+
+            return assets;  // Return the populated assets array
+
+        } catch (error) {
+            console.error('Error fetching assets:', error);
+            return [];  // Return empty array on error
+        }
+    }
+
+
+    function renderAssets(assets) {
+        console.log('Rendering assets');
+        const grid = document.getElementById('assetGrid');
+        grid.innerHTML = '';
+
+        assets.forEach(asset => {
+            const fileSrc = getFileSource(asset);  // Get the proper source
+            const card = document.createElement('div');
+            card.className = 'asset-card';
+
+            // Render based on content type
+            if (fileSrc.startsWith('data:text/html')) {
+                card.innerHTML = `
+                    <iframe src="${fileSrc}" class="asset-preview small"></iframe>
+                    <p>${asset.onchain_metadata?.name || 'Unnamed'}</p>`;
+            } else if (fileSrc.startsWith('data:image')) {
+                card.innerHTML = `
+                    <img src="${fileSrc}" class="asset-image small">
+                    <p>${asset.onchain_metadata?.name || 'Unnamed'}</p>`;
+            } else {
+                card.innerHTML = `
+                    <p>Unsupported File Type</p>
+                    <p>${asset.onchain_metadata?.name || 'Unnamed'}</p>`;
+            }
+
+            card.onclick = () => openModal(asset);  // Open modal on click
+            grid.appendChild(card);
+        });
+    }
+  /*  function getFileSource(asset) {
+        const filesArray = asset.onchain_metadata?.files;
+
+        if (filesArray && filesArray.length > 0) {
+            // Take the first file's src
+            return Array.isArray(filesArray[0].src)
+                ? filesArray[0].src.join('')  // Combine 64-char chunks
+                : filesArray[0].src;
+        }
+
+        // Fallback to `image` if `files` is missing
+        return asset.onchain_metadata?.image || 'placeholder.png';
+    } */
+
+    function getFileSource(asset) {
+        if (!asset || !asset.onchain_metadata) {
+            console.warn('Invalid asset in getFileSource:', asset);
+            return 'placeholder.png';
+        }
+
+        const filesArray = asset.onchain_metadata.files;
+        if (filesArray && filesArray.length > 0) {
+            return Array.isArray(filesArray[0].src)
+                ? filesArray[0].src.join('')
+                : filesArray[0].src;
+        }
+
+        return asset.onchain_metadata.image || 'placeholder.png';
+    }
+
+    function openFullScreen(asset) {
+        console.log('Asset in openFullScreen:', asset);  // Debug asset
+
+        const fileSrc = getFileSource(asset);
+        const fullScreenWindow = window.open('', '_blank');
+
+        if (fileSrc.startsWith('data:text/html')) {
+            fullScreenWindow.document.write(`<iframe src="${fileSrc}"></iframe>`);
+        } else if (fileSrc.startsWith('data:image')) {
+            fullScreenWindow.document.write(`<img src="${fileSrc}">`);
+        } else {
+            fullScreenWindow.document.write(`<p>Unsupported File Type</p>`);
+        }
+    }
+
+
+    function openModal(asset) {
+        const modal = document.getElementById('modal');
+        const modalContent = document.getElementById('modalContent');
+        const modalText = JSON.stringify(asset.onchain_metadata, null, 2);
+        const fileSrc = getFileSource(asset);
+        modal.style.display = 'block';
+
+        if (fileSrc.startsWith('data:text/html')) {
+            modalContent.innerHTML = `<iframe src="${fileSrc}" style="
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: block;
+    margin: auto;
+    transform-origin: center;
+    object-fit: contain;
+"></iframe><p>${modalText}</p>`;
+            //modal.style.display = 'block';
+        } else if (fileSrc.startsWith('data:image')) {
+            modalContent.innerHTML = `<img src="${fileSrc}"><p>${modalText}</p>`;
+            //modal.style.display = 'block';
+        } else {
+          console.warn(`Unsupported file type: ${fileSrc}`);
+          return;
+        }
+    }
+
+    function closeModal() {
+        console.log('Modal closed');
+        document.getElementById('modal').style.display = 'none';
+    }
+
+    function hexToString(hex) {
+    return decodeURIComponent(hex.replace(/(..)/g, '%$1'));
+}
+</script>
+
+</body>
+</html>
