@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cardano On-Chain</title>
+    <style>
+    /* 1) Global theme */
+    body {
+      background: #000;
+      color: #fff;
+      margin: 0;
+      font-family: sans-serif;
+    }
+
+    header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 20px;
+    }
+    header h1 {
+      margin: 0;
+    }
+
+    #logo {
+      width: 50px;
+      height: 50px;
+    }
+
+    /* 2) Center & style the search bar */
+    .search-container {
+      width: 100%;
+      max-width: 800px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      padding: 20px 0;
+    }
+    .search-container input,
+    .search-container button,
+    .search-container select {
+      padding: 8px 12px;
+      font-size: 1rem;
+      border-radius: 5px;
+      border: 1px solid #555;
+      background: #222;
+      color: #fff;
+    }
+    .search-container button:hover {
+      background: #444;
+    }
+
+    /* 3) Grid: single column */
+    #assetGrid {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .asset-card {
+      width: 100%;
+      max-width: 80vw;
+      margin: 20px 0;
+      text-align: center;
+    }
+
+    /* 4) Search-result previews: fixed height = 60vh */
+    .asset-card .asset-image,
+    .asset-card .asset-preview,
+    .asset-image.small,
+    .asset-preview.small {
+      width: 100%;
+      max-width: 80vw;
+      height: 50vh;
+      object-fit: contain;
+    }
+
+    /* 5) Asset-name buttons */
+    .asset-card p {
+      display: inline-block;
+      margin: 10px 0 0;
+      padding: 8px 16px;
+      background: #333;
+      border-radius: 5px;
+      cursor: pointer;
+      font-size: 1rem;
+      color: #fff;
+      text-decoration: none;
+    }
+    .asset-card p:hover {
+      background: #555;
+    }
+
+    .asset-detail-view {
+      max-width: 90vw;
+      max-height: 100vh;    /* confine the whole panel to one viewport height */
+      margin: 20px auto;
+      padding: 20px;
+      background: #1a1a1a;
+      border-radius: 10px;
+      color: #fff;
+      overflow-y: auto;     /* allow metadata to scroll under a fixed-height panel */
+    }
+
+    .asset-detail-view .detail-image {
+      display: block;
+      margin: 0 auto 20px;
+      max-width: 90vw;
+      max-height: 80vh;     /* ≈80% of the viewport height for the image alone */
+      object-fit: contain;
+    }
+
+
+    /* 7) Force metadata text white */
+    .metadata-key,
+    .metadata-value {
+      color: #fff;
+    }
+
+    /* 8) Mobile adjustments */
+    @media (max-width: 768px) {
+      .metadata-item {
+        flex-direction: column;
+      }
+      .metadata-value {
+        text-align: left;
+        max-width: 100%;
+        margin-top: 5px;
+      }
+      /* Scale heights down on phones */
+      .asset-card .asset-image,
+      .asset-card .asset-preview {
+        height: 40vh;
+      }
+      .asset-detail-view .detail-image {
+        height: 60vh;
+      }
+    }
+
+    .custom-dropdown {
+  position: relative;
+  width: 300px;
+}
+
+.asset-scroll-container {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+#assetScrollInput {
+  padding: 8px;
+  font-size: 1rem;
+  border-radius: 5px;
+  border: 1px solid #555;
+  background: #222;
+  color: #fff;
+  width: 200px;
+}
+
+.scroll-buttons {
+  display: flex;
+  flex-direction: column;
+}
+
+.scroll-buttons button {
+  padding: 4px 8px;
+  font-size: 1rem;
+  background: #333;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+}
+
+.scroll-buttons button:hover {
+  background: #555;
+}
+
+
+#assetScrollInput {
+  width: 100%;
+  padding: 8px;
+  font-size: 1rem;
+  border-radius: 5px;
+  border: 1px solid #555;
+  background: #222;
+  color: #fff;
+}
+
+.dropdown-content {
+  position: absolute;
+  background-color: #1a1a1a;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #555;
+  border-top: none;
+  width: 100%;
+  z-index: 1000;
+  display: none;
+}
+
+.dropdown-content div {
+  padding: 8px 12px;
+  cursor: pointer;
+  color: #fff;
+}
+
+.dropdown-content div:hover {
+  background-color: #333;
+}
+
+  </style>
+
+
+</head>
+<body>
+
+<header>
+    <img src="./c.png" alt="Cardano Logo" id="logo">
+    <h1>Cardano On-Chain</h1>
+</header>
+
+<main>
+    <div class="search-container">
+        <input type="text" id="searchInput" placeholder="Enter Policy ID or Wallet Address">
+        <button onclick="handleSearch()">Search</button>
+        <button onclick="pasteFromClipboard()">Paste</button>
+        <div class="asset-scroll-container">
+          <input type="text" id="assetScrollInput" placeholder="Type or scroll..." autocomplete="off">
+          <div class="scroll-buttons">
+            <button id="scrollUp">▲</button>
+            <button id="scrollDown">▼</button>
+          </div>
+        </div>
+
+        <select id="viewDropdown">
+            <option value="10" selected>10</option>
+            <option value="20">20</option>
+            <option value="50">50</option>
+            <option value="all">All</option>
+        </select>
+    </div>
+    <div id="assetGrid"></div>
+</main>
+
+<div id="modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background-color:rgba(0,0,0,0.9);">
+    <div style="position:relative; margin:auto; padding:20px; background-color:#1a1a1a; border-radius:10px; width:80%; height:80%; overflow-y:auto;">
+        <button onclick="closeModal()">Close</button>
+        <button onclick="openFullScreen(currentAsset)">View Fullscreen</button>
+        <pre id="modalContent"></pre>
+    </div>
+</div>
+
+<script>
+    const BLOCKFROST_API_KEY = 'mainnetehvvvJVoJUAz5DFJJz2L9fHZmkXlXTMP';
+    const BLOCKFROST_URL = 'https://cardano-mainnet.blockfrost.io/api/v0';
+
+    let currentAsset = null;
+    let allFilteredAssets = []; // stores all filtered assets
+    let currentRenderIndex = 0; // tracks where we are in the list
+    let pageSize = 10; // controlled by dropdown
+    let filteredAssets = []; // This should be populated with your asset data
+    let currentIndex = -1;
+    let scrollInterval = null;
+
+
+    // Add new function to handle asset ID search
+   async function fetchAssetById(assetId) {
+       try {
+           const response = await fetch(`${BLOCKFROST_URL}/assets/${assetId}`, {
+               headers: { 'project_id': BLOCKFROST_API_KEY }
+           });
+
+           if (!response.ok) throw new Error('Asset not found');
+
+           const assetData = await response.json();
+           return assetData;
+       } catch (error) {
+           showError(error.message);
+           return null;
+       }
+   }
+
+   // Modified handleSearch function
+   async function handleSearch() {
+     const input = document.getElementById('searchInput').value.trim();
+     const grid  = document.getElementById('assetGrid');
+
+     if (!input) {
+       showError('Please enter a search term');
+       return;
+     }
+
+     // 1a) If we already cached this exact input, use it
+     const cached = localStorage.getItem(`cache_${input}`);
+     if (cached) {
+       const data = JSON.parse(cached);
+       // decide detail vs list by looking at the first item
+       if (data.onchain_metadata) {
+         renderAssetDetail(data);
+       } else {
+         renderAssets(data);
+       }
+       return;
+     }
+
+     grid.innerHTML = '<div class="loading">Searching...</div>';
+
+     try {
+       let result;
+       if (input.startsWith('asset1')) {
+         // single-asset
+         const asset = await fetchAssetById(input);
+         if (asset) {
+           renderAssetDetail(asset);
+           result = asset;
+         }
+       } else if (/^[a-f0-9]{56,64}$/i.test(input)) {
+         // policy
+         const assets = await fAssets(input);
+         renderAssets(assets);
+         result = assets;
+       } else {
+         throw new Error('Invalid input');
+       }
+
+       // 1b) Cache the result so refresh will reuse it
+       if (result) {
+         localStorage.setItem(`cache_${input}`, JSON.stringify(result));
+         localStorage.setItem('lastSearchInput', input);
+       }
+     } catch (err) {
+       showError(err.message);
+     }
+   }
+
+
+   // Function to render single asset detail view
+   function renderAssetDetail(asset) {
+       const grid = document.getElementById('assetGrid');
+       const metadata = asset.onchain_metadata || {};
+       const fileSrc = getFileSource(asset);
+
+       grid.innerHTML = `
+           <div class="asset-detail-view">
+               ${fileSrc ? `<img src="${fileSrc}" class="detail-image" alt="Asset">` : ''}
+               <ul class="metadata-list">
+                   ${Object.entries(metadata)
+                       .filter(([key]) => !['image', 'files'].includes(key))
+                       .map(([key, value]) => `
+                           <li class="metadata-item">
+                               <span class="metadata-key">${formatKey(key)}</span>
+                               <span class="metadata-value">${formatValue(value)}</span>
+                           </li>
+                       `).join('')}
+               </ul>
+           </div>
+       `;
+   }
+
+   // Add helper functions
+   async function pasteFromClipboard() {
+    try {
+        const text = await navigator.clipboard.readText();
+        if (!text) {
+            alert("Clipboard is empty");
+            return;
+        }
+
+        const input = document.getElementById('searchInput');
+        input.value = text;
+        input.focus(); // optional, keeps UX smooth
+        console.log("Pasted clipboard:", text);
+
+        // Auto-trigger search if you want
+        handleSearch();
+
+    } catch (err) {
+        console.error("Failed to read clipboard: ", err);
+        alert("Clipboard access denied. Please allow clipboard permissions.");
+    }
+}
+
+
+   function formatKey(key) {
+       return key.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+   }
+
+   function formatValue(value) {
+       if (typeof value === 'object') return JSON.stringify(value, null, 2);
+       if (value.startsWith('http')) return `<a href="${value}" target="_blank">${value}</a>`;
+       return value;
+   }
+
+   function showError(message) {
+       const grid = document.getElementById('assetGrid');
+       grid.innerHTML = `<div class="error">${message}</div>`;
+   }
+
+    async function fAssets(input) {
+        console.log('Input Policy ID:', input);
+
+        try {
+            const response = await fetch(`${BLOCKFROST_URL}/assets/policy/${input}`, {
+                headers: { 'project_id': BLOCKFROST_API_KEY }
+            });
+
+            if (!response.ok) {
+                throw new Error(`Failed to fetch policy assets: ${response.status} ${response.statusText}`);
+            }
+
+            const assetsList = await response.json();
+            console.log('Assets List:', assetsList);
+
+            if (!Array.isArray(assetsList) || assetsList.length === 0) {
+                console.warn('Assets list is empty or not an array');
+                return [];
+            }
+
+            let assets = [];  // Initialize assets array
+            let page = 1;     // Initialize page if needed for pagination
+
+            for (const asset of assetsList) {
+                console.log(`Fetching asset: ${asset.asset}`);
+
+                const assetResponse = await fetch(`${BLOCKFROST_URL}/assets/${asset.asset}`, {
+                    headers: { 'project_id': BLOCKFROST_API_KEY }
+                });
+
+                if (!assetResponse.ok) {
+                    console.error(`Failed to fetch asset ${asset.asset}: ${assetResponse.status} ${assetResponse.statusText}`);
+                    continue;  // Skip to the next asset if this one fails
+                }
+
+                const data = await assetResponse.json();
+                const metadata = data.onchain_metadata || {};
+                const assetName = metadata.name || hexToString(asset.asset.slice(56));
+
+                if (!data) {
+                    console.warn(`No data for asset: ${asset.asset}`);
+                    continue;
+                }
+
+                assets.push(data);
+                page++;
+                console.log('hello');
+            }
+
+            console.log('hello2');
+            console.log('Fetched Assets:', assets);
+
+            return assets;  // Return the populated assets array
+
+        } catch (error) {
+            console.error('Error fetching assets:', error);
+            return [];  // Return empty array on error
+        }
+    }
+
+    function renderAssets(assets) {
+      console.log('Rendering assets with lazy scroll');
+      const dropdown = document.getElementById('viewDropdown');
+      pageSize = parseInt(dropdown.value);
+      allFilteredAssets = assets.filter(a => {
+        const n = a.onchain_metadata?.name;
+        return n && n.toLowerCase() !== 'unnamed';
+      });
+      filteredAssets = [...allFilteredAssets]; // Initialize filteredAssets
+      currentRenderIndex = 0;
+
+      const grid = document.getElementById('assetGrid');
+      grid.innerHTML = '';
+
+      loadMoreAssets(); // Load initial batch
+    }
+
+
+
+
+          function loadMoreAssets() {
+    const grid = document.getElementById('assetGrid');
+
+    const nextBatch = allFilteredAssets.slice(currentRenderIndex, currentRenderIndex + pageSize);
+    nextBatch.forEach(asset => {
+        const fileSrc = getFileSource(asset);
+        const card = document.createElement('div');
+        card.className = 'asset-card';
+
+        if (fileSrc.startsWith('data:text/html')) {
+            card.innerHTML = `
+                <iframe src="${fileSrc}" class="asset-preview small"></iframe>
+                <p>${asset.onchain_metadata?.name || 'Unnamed'}</p>`;
+        } else if (fileSrc.startsWith('data:image')) {
+            card.innerHTML = `
+                <img src="${fileSrc}" class="asset-image small">
+                <p>${asset.onchain_metadata?.name || 'Unnamed'}</p>`;
+        } else {
+            card.innerHTML = `
+                <p>Unsupported File Type</p>
+                <p>${asset.onchain_metadata?.name || 'Unnamed'}</p>`;
+        }
+
+        card.onclick = () => openModal(asset);
+        grid.appendChild(card);
+    });
+
+    currentRenderIndex += pageSize;
+}
+
+
+document.getElementById('assetScrollInput').addEventListener('change', function () {
+    const index = parseInt(this.value);
+    const grid = document.getElementById('assetGrid');
+    const cards = grid.getElementsByClassName('asset-card');
+
+    if (index >= 0 && index < cards.length) {
+        cards[index].scrollIntoView({
+            behavior: 'smooth',
+            block: 'center'
+        });
+    }
+});
+
+  /*  function getFileSource(asset) {
+        const filesArray = asset.onchain_metadata?.files;
+
+        if (filesArray && filesArray.length > 0) {
+            // Take the first file's src
+            return Array.isArray(filesArray[0].src)
+                ? filesArray[0].src.join('')  // Combine 64-char chunks
+                : filesArray[0].src;
+        }
+
+        // Fallback to `image` if `files` is missing
+        return asset.onchain_metadata?.image || 'placeholder.png';
+    } */
+
+    function getFileSource(asset) {
+        if (!asset || !asset.onchain_metadata) {
+            console.warn('Invalid asset in getFileSource:', asset);
+            return 'placeholder.png';
+        }
+
+        const filesArray = asset.onchain_metadata.files;
+        if (filesArray && filesArray.length > 0) {
+            return Array.isArray(filesArray[0].src)
+                ? filesArray[0].src.join('')
+                : filesArray[0].src;
+        }
+
+        return asset.onchain_metadata.image || 'placeholder.png';
+    }
+
+    function openFullScreen(asset) {
+        const fileSrc = getFileSource(asset);
+        const fullScreenWindow = window.open('', '_blank');
+        fullScreenWindow.document.write(`
+            <html>
+            <head>
+                <title>Fullscreen Asset</title>
+                <style>
+                    html, body {
+                        margin: 0;
+                        background-color: #000;
+                        width: 100vw;
+                        height: 100vh;
+                        overflow: hidden;
+                        display: flex;
+                        align-items: center;
+                        justify-content: center;
+                    }
+
+                    .close-btn {
+                        position: fixed;
+                        top: 10px;
+                        left: 10px;
+                        padding: 10px 15px;
+                        background: #333;
+                        color: #fff;
+                        font-size: 18px;
+                        border: none;
+                        border-radius: 5px;
+                        cursor: pointer;
+                        z-index: 9999;
+                    }
+
+                    .close-btn:hover {
+                        background: #555;
+                    }
+
+                    .fullscreen-wrapper {
+                        width: 100%;
+                        height: 100%;
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                    }
+
+                    img, iframe {
+                        width: 100%;
+                        height: 100%;
+                        object-fit: contain;
+                    }
+                </style>
+            </head>
+            <body>
+                <button class="close-btn" onclick="window.close()">✕</button>
+                <div class="fullscreen-wrapper">
+                    ${
+                        fileSrc.startsWith('data:text/html')
+                        ? `<iframe src="${fileSrc}" frameborder="0"></iframe>`
+                        : `<img src="${fileSrc}" alt="Fullscreen Asset">`
+                    }
+                </div>
+            </body>
+            </html>
+        `);
+    }
+
+    function openModal(asset) {
+      currentAsset = asset;
+        const modal = document.getElementById('modal');
+        const modalContent = document.getElementById('modalContent');
+        const modalText = JSON.stringify(asset.onchain_metadata, null, 2);
+        const fileSrc = getFileSource(asset);
+        modal.style.display = 'block';
+
+        if (fileSrc.startsWith('data:text/html')) {
+            modalContent.innerHTML = `<iframe src="${fileSrc}" style="
+    width: 100%;
+    height: 100%;
+    border: none;
+    display: block;
+    margin: auto;
+    transform-origin: center;
+    object-fit: contain;
+"></iframe><p>${modalText}</p>`;
+            //modal.style.display = 'block';
+        } else if (fileSrc.startsWith('data:image')) {
+            modalContent.innerHTML = `<img src="${fileSrc}"><p>${modalText}</p>`;
+            //modal.style.display = 'block';
+        } else {
+          console.warn(`Unsupported file type: ${fileSrc}`);
+          return;
+        }
+    }
+
+    function closeModal() {
+        console.log('Modal closed');
+        document.getElementById('modal').style.display = 'none';
+    }
+
+    function hexToString(hex) {
+    return decodeURIComponent(hex.replace(/(..)/g, '%$1'));
+}
+
+
+document.getElementById('viewDropdown').addEventListener('change', () => {
+    if (allFilteredAssets.length > 0) {
+        renderAssets(allFilteredAssets); // restart with new page size
+    }
+});
+
+
+window.addEventListener('load', () => {
+  const last = localStorage.getItem('lastSearchInput');
+  if (last) {
+    document.getElementById('searchInput').value = last;
+    // Do not call handleSearch() automatically
+    // User can manually trigger the search
+  }
+});
+
+
+window.addEventListener('scroll', () => {
+    const scrollY = window.scrollY + window.innerHeight;
+    const bottomY = document.body.offsetHeight;
+
+    if (scrollY >= bottomY - 100) {
+        if (currentRenderIndex < allFilteredAssets.length) {
+            loadMoreAssets();
+        }
+    }
+});
+
+
+const assetScrollInput = document.getElementById('assetScrollInput');
+const scrollUp = document.getElementById('scrollUp');
+const scrollDown = document.getElementById('scrollDown');
+
+// Function to update the input field based on currentIndex
+function updateInput() {
+  if (filteredAssets.length > 0 && currentIndex >= 0 && currentIndex < filteredAssets.length) {
+    const asset = filteredAssets[currentIndex];
+    const name = asset.onchain_metadata?.name || 'Unnamed';
+    assetScrollInput.value = name;
+
+    const assetCards = document.getElementsByClassName('asset-card');
+    const indexInAll = allFilteredAssets.indexOf(asset);
+
+    if (indexInAll >= 0 && indexInAll < assetCards.length) {
+      assetCards[indexInAll].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+}
+
+
+function ensureFilteredAssets() {
+  if (filteredAssets.length === 0 && allFilteredAssets.length > 0) {
+    filteredAssets = [...allFilteredAssets];
+    currentIndex = 0;
+  }
+}
+
+
+// Event listener for input field to filter assets
+assetScrollInput.addEventListener('input', () => {
+  const query = assetScrollInput.value.toLowerCase();
+  filteredAssets = allFilteredAssets.filter(asset =>
+    asset.onchain_metadata.name && asset.onchain_metadata.name.toLowerCase().includes(query)
+  );
+  currentIndex = 0;
+});
+
+assetScrollInput.addEventListener('keypress', (e) => {
+  if (e.key === 'Enter') {
+    updateInput(); // Scroll only when Enter is hit
+  }
+});
+
+
+// Functions to handle scrolling
+function scrollPreview(direction) {
+  ensureFilteredAssets();
+
+  if (filteredAssets.length === 0) return;
+
+  if (direction === 'up') {
+    currentIndex = (currentIndex - 1 + filteredAssets.length) % filteredAssets.length;
+  } else if (direction === 'down') {
+    currentIndex = (currentIndex + 1) % filteredAssets.length;
+  }
+
+  const asset = filteredAssets[currentIndex];
+  assetScrollInput.value = asset.onchain_metadata?.name || 'Unnamed';
+}
+
+
+
+function scrollToCurrent() {
+  if (filteredAssets.length > 0 && currentIndex >= 0 && currentIndex < filteredAssets.length) {
+    const assetCards = document.getElementsByClassName('asset-card');
+    const indexInAll = allFilteredAssets.indexOf(filteredAssets[currentIndex]);
+
+    if (indexInAll >= 0 && indexInAll < assetCards.length) {
+      assetCards[indexInAll].scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+}
+
+scrollUp.addEventListener('mousedown', () => scrollPreview('up'));
+scrollDown.addEventListener('mousedown', () => scrollPreview('down'));
+
+
+
+
+
+</script>
+
+</body>
+</html>
